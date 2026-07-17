@@ -457,7 +457,7 @@ def check_kubernetes_container_policy(pod, container) -> dict[str, bool]:
         "NET_RAW",
     }
 
-        all_checks = {
+    all_checks = {
         "not_privileged": not privileged,
         "non_root_user": run_as_non_root,
         "no_privilege_escalation": allow_privilege_escalation is False,
@@ -470,7 +470,7 @@ def check_kubernetes_container_policy(pod, container) -> dict[str, bool]:
         "no_host_pid": not bool(pod.spec.host_pid),
         "no_host_ipc": not bool(pod.spec.host_ipc),
         "no_dangerous_capabilities": not bool(
-            added_capabilities & dangerous_capabilities
+     added_capabilities & dangerous_capabilities
         ),
     }
 
