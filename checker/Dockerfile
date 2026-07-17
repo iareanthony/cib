@@ -16,5 +16,5 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY checker.py .
-
-CMD ["python", "checker.py"]
+ENTRYPOINT ["python", "/app/checker.py"]
+CMD []

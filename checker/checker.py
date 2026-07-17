@@ -62,7 +62,22 @@ SBOM_DIR = Path(os.environ.get("SBOM_DIR", "/data/sboms"))
 
 # Single remote host (backwards-compat). Prefer DOCKER_HOSTS for multi-host.
 DOCKER_HOST = os.environ.get("DOCKER_HOST", "")
+DISCOVERY_PROVIDER = os.environ.get(
+    "DISCOVERY_PROVIDER",
+    "docker",
+).strip().lower()
 
+if DISCOVERY_PROVIDER not in {"docker", "kubernetes"}:
+    logger.error(
+        "DISCOVERY_PROVIDER must be 'docker' or 'kubernetes', got %r",
+        DISCOVERY_PROVIDER,
+    )
+    sys.exit(1)
+
+KUBERNETES_CLUSTER_NAME = os.environ.get(
+    "KUBERNETES_CLUSTER_NAME",
+    "kubernetes",
+).strip() or "kubernetes"
 # Licenses that violate policy by default (copyleft — problematic for proprietary stacks)
 _default_deny = "GPL-2.0-only,GPL-2.0-or-later,GPL-3.0-only,GPL-3.0-or-later,AGPL-3.0-only,AGPL-3.0-or-later"
 LICENSE_DENY_LIST = {
@@ -205,11 +220,255 @@ def get_containers(docker_url: str = "", client=None) -> list[docker.models.cont
     except Exception as e:
         logger.warning("Could not list containers: %s", e)
         return []
+def discover_kubernetes_inventory() -> tuple[list[str], list[dict]]:
+    """Discover running Kubernetes images and container policy records."""
+    try:
+        from kubernetes import client
+
+        _load_kubernetes_config()
+
+        core_api = client.CoreV1Api()
+        apps_api = client.AppsV1Api()
+        batch_api = client.BatchV1Api()
+
+        pods = core_api.list_pod_for_all_namespaces(
+            field_selector="status.phase=Running",
+        )
+
+        replica_sets = {
+            (item.metadata.namespace, item.metadata.name): item
+            for item in apps_api.list_replica_set_for_all_namespaces().items
+        }
+
+        jobs = {
+            (item.metadata.namespace, item.metadata.name): item
+            for item in batch_api.list_job_for_all_namespaces().items
+        }
+
+        images = set()
+        containers = []
+
+        for pod in pods.items:
+            if not pod.spec:
+                continue
+
+            namespace = pod.metadata.namespace or "default"
+            workload_kind, workload = _resolve_kubernetes_workload(
+                pod,
+                replica_sets,
+                jobs,
+            )
+
+            container_groups = [
+                ("container", pod.spec.containers or []),
+                ("init", pod.spec.init_containers or []),
+                ("ephemeral", pod.spec.ephemeral_containers or []),
+            ]
+
+            for container_type, group in container_groups:
+                for container in group:
+                    if not container.image:
+                        continue
+
+                    images.add(container.image)
+
+                    containers.append({
+                        "namespace": namespace,
+                        "pod": pod.metadata.name,
+                        "workload_kind": workload_kind,
+                        "workload": workload,
+                        "container_type": container_type,
+                        "container": container.name,
+                        "image": container.image,
+                        "checks": check_kubernetes_container_policy(
+                            pod,
+                            container,
+                        ),
+                    })
+        logger.info(
+            "Discovered %d Kubernetes images and %d container records",
+            len(images),
+            len(containers),
+        )
+
+        return sorted(images), containers
+
+    except Exception as e:
+        logger.warning("Kubernetes discovery failed: %s", e)
+        return [], []
+
+def _load_kubernetes_config():
+    """Load in-cluster configuration, falling back to local kubeconfig."""
+    from kubernetes import config
+    from kubernetes.config.config_exception import ConfigException
+
+    try:
+        config.load_incluster_config()
+        logger.info("Using in-cluster Kubernetes configuration")
+    except ConfigException:
+        config.load_kube_config()
+        logger.info("Using local kubeconfig")
 
 
+def _owner_reference(obj):
+    references = (
+        getattr(getattr(obj, "metadata", None), "owner_references", None)
+        or []
+    )
+
+    for reference in references:
+        if getattr(reference, "controller", False):
+            return reference
+
+    return references[0] if references else None
+
+
+def _resolve_kubernetes_workload(
+    pod,
+    replica_sets: dict,
+    jobs: dict,
+) -> tuple[str, str]:
+    owner = _owner_reference(pod)
+
+    if owner is None:
+        return "Pod", pod.metadata.name
+
+    namespace = pod.metadata.namespace
+    kind = owner.kind
+    name = owner.name
+
+    if kind == "ReplicaSet":
+        replica_set = replica_sets.get((namespace, name))
+        parent = _owner_reference(replica_set) if replica_set else None
+
+        if parent:
+            return parent.kind, parent.name
+
+    if kind == "Job":
+        job = jobs.get((namespace, name))
+        parent = _owner_reference(job) if job else None
+
+        if parent and parent.kind == "CronJob":
+            return parent.kind, parent.name
+
+    return kind, name
+
+
+def _effective_security_context(pod, container):
+    """Return container security context with pod defaults available."""
+    pod_context = pod.spec.security_context
+    container_context = container.security_context
+
+    return pod_context, container_context
+
+
+def check_kubernetes_container_policy(pod, container) -> dict[str, bool]:
+    """Evaluate CIS-aligned policy checks for a Kubernetes container."""
+    pod_context, container_context = _effective_security_context(
+        pod,
+        container,
+    )
+
+    resources = container.resources
+    requests = resources.requests or {} if resources else {}
+    limits = resources.limits or {} if resources else {}
+
+    privileged = bool(
+        container_context
+        and container_context.privileged
+    )
+
+    allow_privilege_escalation = (
+        container_context.allow_privilege_escalation
+        if container_context
+        else None
+    )
+
+    read_only_rootfs = bool(
+        container_context
+        and container_context.read_only_root_filesystem
+    )
+
+    container_run_as_non_root = (
+        container_context.run_as_non_root
+        if container_context
+        else None
+    )
+
+    container_run_as_user = (
+        container_context.run_as_user
+        if container_context
+        else None
+    )
+
+    pod_run_as_non_root = (
+        pod_context.run_as_non_root
+        if pod_context
+        else None
+    )
+
+    pod_run_as_user = (
+        pod_context.run_as_user
+        if pod_context
+        else None
+    )
+
+    run_as_non_root = (
+        container_run_as_non_root is True
+        or pod_run_as_non_root is True
+        or (
+            container_run_as_user is not None
+            and container_run_as_user != 0
+        )
+        or (
+            container_run_as_user is None
+            and pod_run_as_user is not None
+            and pod_run_as_user != 0
+        )
+    )
+
+    capabilities = (
+        container_context.capabilities
+        if container_context
+        else None
+    )
+
+    added_capabilities = {
+        capability.upper()
+        for capability in (
+            capabilities.add or []
+            if capabilities
+            else []
+        )
+    }
+
+    dangerous_capabilities = {
+        "SYS_ADMIN",
+        "SYS_MODULE",
+        "SYS_PTRACE",
+        "NET_ADMIN",
+        "NET_RAW",
+    }
+
+    return {
+        "not_privileged": not privileged,
+        "non_root_user": run_as_non_root,
+        "no_privilege_escalation": allow_privilege_escalation is False,
+        "memory_limit": "memory" in limits,
+        "cpu_limit": "cpu" in limits,
+        "memory_request": "memory" in requests,
+        "cpu_request": "cpu" in requests,
+        "read_only_rootfs": read_only_rootfs,
+        "no_host_network": not bool(pod.spec.host_network),
+        "no_host_pid": not bool(pod.spec.host_pid),
+        "no_host_ipc": not bool(pod.spec.host_ipc),
+        "no_dangerous_capabilities": not bool(
+            added_capabilities & dangerous_capabilities
+        ),
+    }
 # ── Container policy checks ───────────────────────────────────────────────────
 
-POLICY_CHECKS = [
+DOCKER_POLICY_CHECKS = [
     "not_privileged",
     "non_root_user",
     "no_new_privileges",
@@ -271,6 +530,60 @@ def push_policy_metrics(container_name: str, checks: dict[str, bool], host: str 
     )
     _push(lines)
 
+def push_kubernetes_policy_metrics(
+    record: dict,
+    cluster: str,
+) -> int:
+    """Push policy metrics for one Kubernetes container."""
+    ts = _ts_ms()
+    checks = record["checks"]
+    lines = []
+    passing = 0
+
+    labels = (
+        f'cluster="{_safe_label(cluster)}",'
+        f'namespace="{_safe_label(record["namespace"])}",'
+        f'workload_kind="{_safe_label(record["workload_kind"])}",'
+        f'workload="{_safe_label(record["workload"])}",'
+        f'pod="{_safe_label(record["pod"])}",'
+        f'container_type="{_safe_label(record["container_type"])}",'
+        f'container="{_safe_label(record["container"])}",'
+        f'image="{_safe_label(record["image"])}"'
+    )
+
+    violations = 0
+
+    for check, passed in checks.items():
+        value = 0 if passed else 1
+
+        if passed:
+            passing += 1
+        else:
+            violations += 1
+
+        lines.append(
+            f'cib_kubernetes_policy_violation{{'
+            f'{labels},check="{_safe_label(check)}"'
+            f'}} {value} {ts}'
+        )
+
+    score = (
+        passing / len(checks) * 100
+        if checks
+        else 0
+    )
+
+    lines.append(
+        f'cib_kubernetes_policy_score{{{labels}}} '
+        f'{score:.1f} {ts}'
+    )
+
+    lines.append(
+        f'cib_kubernetes_workload_image{{{labels}}} 1 {ts}'
+    )
+
+    _push(lines)
+    return violations
 
 # ── Trivy SBOM scan ───────────────────────────────────────────────────────────
 
@@ -484,85 +797,283 @@ def push_summary(images_checked: int, containers_checked: int, total_violations:
 def run_scan() -> None:
     logger.info("─── CIB scan starting ───")
     ts_start = time.time()
-    hosts = _parse_docker_hosts()
+
+    if DISCOVERY_PROVIDER == "kubernetes":
+        hosts = [(KUBERNETES_CLUSTER_NAME, "")]
+    else:
+        hosts = _parse_docker_hosts()
 
     total_violations = 0
     total_containers = 0
     total_images = 0
     eol_count = 0
 
-    def scan_image_full(image: str, docker_url: str, host_name: str) -> None:
+    def scan_image_full(
+        image: str,
+        docker_url: str,
+        host_name: str,
+    ) -> None:
         nonlocal total_images, eol_count
+
         logger.info("Scanning image: %s", image)
 
         trivy_data = scan_trivy_json(image, docker_url)
 
-        eol_info = check_eol(image, trivy_data) if trivy_data else None
-        push_eol_metrics(image, eol_info, host=host_name)
+        eol_info = (
+            check_eol(image, trivy_data)
+            if trivy_data
+            else None
+        )
+
+        push_eol_metrics(
+            image,
+            eol_info,
+            host=host_name,
+        )
+
         if eol_info and eol_info["is_eol"]:
-            logger.info("  %s — EOL base OS: %s %s (eol: %s)",
-                        image, eol_info["family"], eol_info["version"], eol_info["eol_date"])
+            logger.info(
+                "  %s — EOL base OS: %s %s (eol: %s)",
+                image,
+                eol_info["family"],
+                eol_info["version"],
+                eol_info["eol_date"],
+            )
             eol_count += 1
 
         sbom = scan_sbom(image, docker_url)
-        if sbom:
-            total_components = len(sbom.get("components", []))
-            violations = check_licenses(image, sbom)
-            push_license_metrics(image, violations, total_components, host=host_name)
-            if violations:
-                logger.info("  %s — %d license violations (%s)",
-                            image, len(violations),
-                            ", ".join(sorted({v["license"] for v in violations})))
-            else:
-                logger.info("  %s — %d components, no license violations", image, total_components)
-            total_images += 1
+
+        if not sbom:
+            push_license_metrics(
+                image,
+                [],
+                0,
+                host=host_name,
+            )
+            return
+
+        total_components = len(sbom.get("components", []))
+        violations = check_licenses(image, sbom)
+
+        push_license_metrics(
+            image,
+            violations,
+            total_components,
+            host=host_name,
+        )
+
+        if violations:
+            logger.info(
+                "  %s — %d license violations (%s)",
+                image,
+                len(violations),
+                ", ".join(
+                    sorted({
+                        violation["license"]
+                        for violation in violations
+                    })
+                ),
+            )
         else:
-            push_license_metrics(image, [], 0, host=host_name)
+            logger.info(
+                "  %s — %d components, no license violations",
+                image,
+                total_components,
+            )
 
-    for host_name, docker_url in hosts:
-        logger.info("── Host: %s (%s) ──", host_name, docker_url or "local socket")
+        total_images += 1
 
-        try:
-            client = _docker_client(docker_url)
-        except Exception as e:
-            logger.warning("Could not create Docker client for %s: %s", host_name, e)
-            client = None
+    if DISCOVERY_PROVIDER == "kubernetes":
+        images, kubernetes_containers = (
+            discover_kubernetes_inventory()
+        )
 
-        # 1. Container policy checks
-        containers = get_containers(docker_url, client=client)
-        total_containers += len(containers)
-        for container in containers:
-            name = container.name
-            logger.info("Policy check: %s", name)
-            checks = check_container_policy(container)
-            failing = [k for k, v in checks.items() if not v]
-            total_violations += len(failing)
-            if failing:
-                logger.info("  %s — policy violations: %s", name, ", ".join(failing))
-            push_policy_metrics(name, checks, host=host_name)
+        total_containers = len(kubernetes_containers)
 
-        # 2. Image SBOM + license + EOL checks
-        images = discover_images(docker_url, client=client)
-        for image in images:
+        for record in kubernetes_containers:
             if _shutdown.is_set():
-                logger.info("Shutdown requested — aborting scan loop")
+                logger.info(
+                    "Shutdown requested — aborting policy checks"
+                )
                 break
-            scan_image_full(image, docker_url, host_name)
+
+            failing = [
+                check
+                for check, passed in record["checks"].items()
+                if not passed
+            ]
+
+            logger.info(
+                "Policy check: %s/%s/%s",
+                record["namespace"],
+                record["workload"],
+                record["container"],
+            )
+
+            if failing:
+                logger.info(
+                    "  policy violations: %s",
+                    ", ".join(failing),
+                )
+
+            total_violations += (
+                push_kubernetes_policy_metrics(
+                    record,
+                    KUBERNETES_CLUSTER_NAME,
+                )
+            )
+
+        if not _shutdown.is_set():
+            for image in images:
+                if _shutdown.is_set():
+                    logger.info(
+                        "Shutdown requested — aborting image scans"
+                    )
+                    break
+
+                scan_image_full(
+                    image,
+                    "",
+                    KUBERNETES_CLUSTER_NAME,
+                )
+
+        if ADDITIONAL_IMAGES and not _shutdown.is_set():
+            logger.info(
+                "── Host: additional (extra images) ──"
+            )
+
+            for image in ADDITIONAL_IMAGES:
+                if _shutdown.is_set():
+                    break
+
+                scan_image_full(
+                    image,
+                    "",
+                    "additional",
+                )
+
+        push_summary(
+            total_images,
+            total_containers,
+            total_violations,
+            eol_count,
+        )
+
+        logger.info(
+            "─── CIB Kubernetes scan complete in %.0fs: "
+            "%d containers, %d images, %d violations ───",
+            time.time() - ts_start,
+            total_containers,
+            total_images,
+            total_violations,
+        )
+        return
+
+    # Docker discovery and policy checks
+    for host_name, docker_url in hosts:
         if _shutdown.is_set():
+            logger.info(
+                "Shutdown requested — aborting scan loop"
+            )
             break
 
-    # Scan ADDITIONAL_IMAGES once, outside the per-host loop, under "additional" host label
+        logger.info(
+            "── Host: %s (%s) ──",
+            host_name,
+            docker_url or "local socket",
+        )
+
+        try:
+            docker_client = _docker_client(docker_url)
+        except Exception as exc:
+            logger.warning(
+                "Could not create Docker client for %s: %s",
+                host_name,
+                exc,
+            )
+            docker_client = None
+
+        containers = get_containers(
+            docker_url,
+            client=docker_client,
+        )
+
+        total_containers += len(containers)
+
+        for container in containers:
+            if _shutdown.is_set():
+                break
+
+            logger.info(
+                "Policy check: %s",
+                container.name,
+            )
+
+            checks = check_container_policy(container)
+
+            failing = [
+                check
+                for check, passed in checks.items()
+                if not passed
+            ]
+
+            total_violations += len(failing)
+
+            if failing:
+                logger.info(
+                    "  %s — policy violations: %s",
+                    container.name,
+                    ", ".join(failing),
+                )
+
+            push_policy_metrics(
+                container.name,
+                checks,
+                host=host_name,
+            )
+
+        images = discover_images(
+            docker_url,
+            client=docker_client,
+        )
+
+        for image in images:
+            if _shutdown.is_set():
+                break
+
+            scan_image_full(
+                image,
+                docker_url,
+                host_name,
+            )
+
     if ADDITIONAL_IMAGES and not _shutdown.is_set():
-        logger.info("── Host: additional (extra images) ──")
+        logger.info(
+            "── Host: additional (extra images) ──"
+        )
+
         for image in ADDITIONAL_IMAGES:
             if _shutdown.is_set():
-                logger.info("Shutdown requested — aborting scan loop")
                 break
-            scan_image_full(image, "", "additional")
 
-    push_summary(total_images, total_containers, total_violations, eol_count)
-    logger.info("─── CIB scan complete in %.0fs across %d host(s) ───",
-                time.time() - ts_start, len(hosts))
+            scan_image_full(
+                image,
+                "",
+                "additional",
+            )
+
+    push_summary(
+        total_images,
+        total_containers,
+        total_violations,
+        eol_count,
+    )
+
+    logger.info(
+        "─── CIB scan complete in %.0fs across %d host(s) ───",
+        time.time() - ts_start,
+        len(hosts),
+    )
 
 
 def main() -> None:
@@ -570,18 +1081,29 @@ def main() -> None:
         run_scan()
         return
 
-    logger.info("CIB checker starting (interval=%.1fh)", SCAN_INTERVAL_HOURS)
+    logger.info(
+        "CIB checker starting "
+        "(provider=%s, interval=%.1fh)",
+        DISCOVERY_PROVIDER,
+        SCAN_INTERVAL_HOURS,
+    )
 
     if SCAN_ON_STARTUP:
         run_scan()
 
-    schedule.every(SCAN_INTERVAL_HOURS).hours.do(run_scan)
+    schedule.every(
+        SCAN_INTERVAL_HOURS
+    ).hours.do(run_scan)
 
     while not _shutdown.is_set():
         schedule.run_pending()
+
         if _shutdown.wait(60):
             break
-    logger.info("Shutdown signal received, exiting.")
+
+    logger.info(
+        "Shutdown signal received, exiting."
+    )
 
 
 if __name__ == "__main__":
