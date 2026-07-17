@@ -290,7 +290,13 @@ def discover_kubernetes_inventory() -> tuple[list[str], list[dict]]:
             len(images),
             len(containers),
         )
+           if namespace in KUBERNETES_EXCLUDED_NAMESPACES:
+                continue
 
+            workload_key = f"{namespace}/{workload_kind}/{workload}"
+
+            if workload_key in KUBERNETES_EXCLUDED_WORKLOADS:
+                continue
         return sorted(images), containers
 
     except Exception as e:
@@ -450,7 +456,7 @@ def check_kubernetes_container_policy(pod, container) -> dict[str, bool]:
         "NET_RAW",
     }
 
-    return {
+        all_checks = {
         "not_privileged": not privileged,
         "non_root_user": run_as_non_root,
         "no_privilege_escalation": allow_privilege_escalation is False,
@@ -466,7 +472,53 @@ def check_kubernetes_container_policy(pod, container) -> dict[str, bool]:
             added_capabilities & dangerous_capabilities
         ),
     }
-# ── Container policy checks ───────────────────────────────────────────────────
+
+    return {
+        check: passed
+        for check, passed in all_checks.items()
+        if check in KUBERNETES_ENABLED_CHECKS
+     }
+
+KUBERNETES_ENABLED_CHECKS = {
+    value.strip()
+    for value in os.environ.get(
+        "KUBERNETES_ENABLED_CHECKS",
+        (
+            "not_privileged,"
+            "non_root_user,"
+            "no_privilege_escalation,"
+            "memory_limit,"
+            "cpu_limit,"
+            "memory_request,"
+            "cpu_request,"
+            "read_only_rootfs,"
+            "no_host_network,"
+            "no_host_pid,"
+            "no_host_ipc,"
+            "no_dangerous_capabilities"
+        ),
+    ).split(",")
+    if value.strip()
+}
+
+KUBERNETES_EXCLUDED_NAMESPACES = {
+    value.strip()
+    for value in os.environ.get(
+        "KUBERNETES_EXCLUDED_NAMESPACES",
+        "",
+    ).split(",")
+    if value.strip()
+}
+
+KUBERNETES_EXCLUDED_WORKLOADS = {
+    value.strip()
+    for value in os.environ.get(
+        "KUBERNETES_EXCLUDED_WORKLOADS",
+        "",
+    ).split(",")
+    if value.strip()
+}
+
 
 DOCKER_POLICY_CHECKS = [
     "not_privileged",
