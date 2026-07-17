@@ -258,7 +258,15 @@ def discover_kubernetes_inventory() -> tuple[list[str], list[dict]]:
                 replica_sets,
                 jobs,
             )
+            if namespace in KUBERNETES_EXCLUDED_NAMESPACES:
+                continue
 
+            workload_key = (
+                f"{namespace}/{workload_kind}/{workload}"
+            )
+
+            if workload_key in KUBERNETES_EXCLUDED_WORKLOADS:
+                continue
             container_groups = [
                 ("container", pod.spec.containers or []),
                 ("init", pod.spec.init_containers or []),
@@ -290,13 +298,6 @@ def discover_kubernetes_inventory() -> tuple[list[str], list[dict]]:
             len(images),
             len(containers),
         )
-           if namespace in KUBERNETES_EXCLUDED_NAMESPACES:
-                continue
-
-            workload_key = f"{namespace}/{workload_kind}/{workload}"
-
-            if workload_key in KUBERNETES_EXCLUDED_WORKLOADS:
-                continue
         return sorted(images), containers
 
     except Exception as e:
