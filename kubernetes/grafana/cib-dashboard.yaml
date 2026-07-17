@@ -1,0 +1,1183 @@
+apiVersion: v1
+data:
+  cib-overview.json: |
+    {
+      "uid": "cib-overview",
+      "title": "CIB \u2014 Compliance Overview",
+      "description": "Kubernetes container policy, license compliance, SBOM inventory, and EOL base image tracking",
+      "tags": [
+        "cib",
+        "compliance",
+        "kubernetes",
+        "policy",
+        "sbom",
+        "security"
+      ],
+      "refresh": "5m",
+      "schemaVersion": 39,
+      "version": 2,
+      "time": {
+        "from": "now-7d",
+        "to": "now"
+      },
+      "timepicker": {},
+      "graphTooltip": 1,
+      "panels": [
+        {
+          "id": 1,
+          "type": "stat",
+          "title": "Selected Policy Violations",
+          "description": "Current Kubernetes policy violations matching the selected filters",
+          "gridPos": {
+            "h": 4,
+            "w": 5,
+            "x": 0,
+            "y": 0
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "colorMode": "background",
+            "graphMode": "area",
+            "justifyMode": "center",
+            "textMode": "auto"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "orange",
+                    "value": 1
+                  },
+                  {
+                    "color": "red",
+                    "value": 10
+                  }
+                ]
+              },
+              "mappings": []
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "cib-vm"
+              },
+              "expr": "sum(last_over_time(cib_kubernetes_policy_violation{cluster=~\"$cluster\",namespace=~\"$namespace\",workload_kind=~\"$workload_kind\",workload=~\"$workload\",check=~\"$check\"}[8h])) or vector(0)",
+              "legendFormat": "Violations",
+              "refId": "A"
+            }
+          ]
+        },
+        {
+          "id": 2,
+          "type": "stat",
+          "title": "EOL Base Images",
+          "description": "Running images built on an end-of-life OS",
+          "gridPos": {
+            "h": 4,
+            "w": 5,
+            "x": 5,
+            "y": 0
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "center",
+            "textMode": "auto"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "red",
+                    "value": 1
+                  }
+                ]
+              },
+              "mappings": []
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "cib-vm"
+              },
+              "expr": "last_over_time(cib_eol_images_total[8h])",
+              "legendFormat": "EOL Images",
+              "refId": "A"
+            }
+          ]
+        },
+        {
+          "id": 3,
+          "type": "stat",
+          "title": "License Violations",
+          "description": "Images with copyleft or denied licenses in their SBOM",
+          "gridPos": {
+            "h": 4,
+            "w": 5,
+            "x": 10,
+            "y": 0
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "colorMode": "background",
+            "graphMode": "none",
+            "justifyMode": "center",
+            "textMode": "auto"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "orange",
+                    "value": 1
+                  }
+                ]
+              },
+              "mappings": []
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "cib-vm"
+              },
+              "expr": "sum(last_over_time(cib_license_violations_total[8h])) or vector(0)",
+              "legendFormat": "License Violations",
+              "refId": "A"
+            }
+          ]
+        },
+        {
+          "id": 4,
+          "type": "stat",
+          "title": "Images Checked",
+          "gridPos": {
+            "h": 4,
+            "w": 4,
+            "x": 15,
+            "y": 0
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "colorMode": "value",
+            "graphMode": "none",
+            "justifyMode": "center",
+            "textMode": "auto"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "fixed",
+                "fixedColor": "text"
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "text",
+                    "value": null
+                  }
+                ]
+              },
+              "mappings": []
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "cib-vm"
+              },
+              "expr": "last_over_time(cib_images_checked_total[8h])",
+              "legendFormat": "Images",
+              "refId": "A"
+            }
+          ]
+        },
+        {
+          "id": 5,
+          "type": "stat",
+          "title": "Last Scan",
+          "gridPos": {
+            "h": 4,
+            "w": 5,
+            "x": 19,
+            "y": 0
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ]
+            },
+            "colorMode": "value",
+            "graphMode": "none",
+            "justifyMode": "center",
+            "textMode": "auto"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "unit": "dateTimeAsLocal",
+              "color": {
+                "mode": "fixed",
+                "fixedColor": "text"
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "text",
+                    "value": null
+                  }
+                ]
+              },
+              "mappings": []
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "cib-vm"
+              },
+              "expr": "cib_last_scan_timestamp",
+              "legendFormat": "Last Scan",
+              "refId": "A"
+            }
+          ]
+        },
+        {
+          "id": 7,
+          "type": "table",
+          "title": "EOL Base Images",
+          "description": "Containers built on end-of-life operating systems",
+          "gridPos": {
+            "h": 9,
+            "w": 12,
+            "x": 0,
+            "y": 28
+          },
+          "options": {
+            "footer": {
+              "show": false
+            }
+          },
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "align": "left",
+                "displayMode": "auto"
+              }
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "image"
+                },
+                "properties": [
+                  {
+                    "id": "displayName",
+                    "value": "Image"
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "os"
+                },
+                "properties": [
+                  {
+                    "id": "displayName",
+                    "value": "OS"
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "version"
+                },
+                "properties": [
+                  {
+                    "id": "displayName",
+                    "value": "Version"
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "eol_date"
+                },
+                "properties": [
+                  {
+                    "id": "displayName",
+                    "value": "EOL Date"
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Value"
+                },
+                "properties": [
+                  {
+                    "id": "displayName",
+                    "value": "EOL"
+                  },
+                  {
+                    "id": "custom.width",
+                    "value": 80
+                  },
+                  {
+                    "id": "mappings",
+                    "value": [
+                      {
+                        "type": "value",
+                        "options": {
+                          "0": {
+                            "text": "Supported",
+                            "color": "green",
+                            "index": 0
+                          },
+                          "1": {
+                            "text": "EOL",
+                            "color": "red",
+                            "index": 1
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "id": "custom.displayMode",
+                    "value": "color-background"
+                  }
+                ]
+              }
+            ]
+          },
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "__name__": true
+                },
+                "indexByName": {},
+                "renameByName": {}
+              }
+            }
+          ],
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "cib-vm"
+              },
+              "expr": "last_over_time(cib_image_eol[8h])",
+              "instant": true,
+              "legendFormat": "",
+              "refId": "A",
+              "format": "table"
+            }
+          ]
+        },
+        {
+          "id": 8,
+          "type": "table",
+          "title": "License Violations",
+          "description": "SBOM components with denied licenses (copyleft / policy violations)",
+          "gridPos": {
+            "h": 9,
+            "w": 12,
+            "x": 12,
+            "y": 28
+          },
+          "options": {
+            "footer": {
+              "show": false
+            }
+          },
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "align": "left",
+                "displayMode": "auto"
+              }
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "image"
+                },
+                "properties": [
+                  {
+                    "id": "displayName",
+                    "value": "Image"
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "package"
+                },
+                "properties": [
+                  {
+                    "id": "displayName",
+                    "value": "Package"
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "version"
+                },
+                "properties": [
+                  {
+                    "id": "displayName",
+                    "value": "Version"
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "license"
+                },
+                "properties": [
+                  {
+                    "id": "displayName",
+                    "value": "License"
+                  },
+                  {
+                    "id": "links",
+                    "value": [
+                      {
+                        "title": "SPDX",
+                        "url": "https://spdx.org/licenses/${__value.raw}.html"
+                      }
+                    ]
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Value"
+                },
+                "properties": [
+                  {
+                    "id": "displayName",
+                    "value": "Status"
+                  },
+                  {
+                    "id": "custom.width",
+                    "value": 100
+                  },
+                  {
+                    "id": "mappings",
+                    "value": [
+                      {
+                        "type": "value",
+                        "options": {
+                          "1": {
+                            "text": "VIOLATION",
+                            "color": "red",
+                            "index": 0
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "id": "custom.displayMode",
+                    "value": "color-background"
+                  }
+                ]
+              }
+            ]
+          },
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "__name__": true
+                },
+                "indexByName": {},
+                "renameByName": {}
+              }
+            }
+          ],
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "cib-vm"
+              },
+              "expr": "last_over_time(cib_license_violation[8h])",
+              "instant": true,
+              "legendFormat": "",
+              "refId": "A",
+              "format": "table"
+            }
+          ]
+        },
+        {
+          "id": 9,
+          "type": "timeseries",
+          "title": "Compliance Trend",
+          "gridPos": {
+            "h": 8,
+            "w": 24,
+            "x": 0,
+            "y": 22
+          },
+          "options": {
+            "tooltip": {
+              "mode": "multi",
+              "sort": "none"
+            },
+            "legend": {
+              "displayMode": "list",
+              "placement": "bottom"
+            }
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "palette-classic"
+              },
+              "custom": {
+                "drawStyle": "line",
+                "lineInterpolation": "stepAfter",
+                "fillOpacity": 10,
+                "showPoints": "auto",
+                "spanNulls": true
+              },
+              "unit": "short"
+            }
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "cib-vm"
+              },
+              "expr": "cib_total_policy_violations",
+              "legendFormat": "Policy Violations",
+              "refId": "A"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "cib-vm"
+              },
+              "expr": "cib_eol_images_total",
+              "legendFormat": "EOL Images",
+              "refId": "B"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "cib-vm"
+              },
+              "expr": "sum(cib_license_violations_total) or vector(0)",
+              "legendFormat": "License Violations",
+              "refId": "C"
+            }
+          ]
+        },
+        {
+          "id": 20,
+          "type": "table",
+          "title": "Kubernetes Policy Violations",
+          "description": "Only failed checks are shown",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "cib-vm"
+          },
+          "gridPos": {
+            "h": 13,
+            "w": 24,
+            "x": 0,
+            "y": 4
+          },
+          "options": {
+            "cellHeight": "sm",
+            "footer": {
+              "show": false
+            },
+            "showHeader": true,
+            "sortBy": [
+              {
+                "displayName": "Namespace",
+                "desc": false
+              },
+              {
+                "displayName": "Workload",
+                "desc": false
+              }
+            ]
+          },
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "align": "auto",
+                "cellOptions": {
+                  "type": "auto"
+                },
+                "filterable": true,
+                "inspect": false
+              },
+              "mappings": []
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Namespace"
+                },
+                "properties": [
+                  {
+                    "id": "custom.width",
+                    "value": 140
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Type"
+                },
+                "properties": [
+                  {
+                    "id": "custom.width",
+                    "value": 110
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Workload"
+                },
+                "properties": [
+                  {
+                    "id": "custom.width",
+                    "value": 230
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Container"
+                },
+                "properties": [
+                  {
+                    "id": "custom.width",
+                    "value": 170
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Check"
+                },
+                "properties": [
+                  {
+                    "id": "custom.width",
+                    "value": 210
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Status"
+                },
+                "properties": [
+                  {
+                    "id": "custom.width",
+                    "value": 100
+                  },
+                  {
+                    "id": "mappings",
+                    "value": [
+                      {
+                        "type": "value",
+                        "options": {
+                          "1": {
+                            "text": "FAIL",
+                            "color": "red",
+                            "index": 0
+                          }
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "id": "custom.cellOptions",
+                    "value": {
+                      "type": "color-background"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "cib-vm"
+              },
+              "expr": "last_over_time(cib_kubernetes_policy_violation{cluster=~\"$cluster\",namespace=~\"$namespace\",workload_kind=~\"$workload_kind\",workload=~\"$workload\",check=~\"$check\"}[8h]) == 1",
+              "format": "table",
+              "instant": true,
+              "legendFormat": "",
+              "refId": "A"
+            }
+          ],
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "__name__": true,
+                  "cluster": true,
+                  "host": true,
+                  "image": true,
+                  "pod": true,
+                  "container_type": true
+                },
+                "renameByName": {
+                  "namespace": "Namespace",
+                  "workload_kind": "Type",
+                  "workload": "Workload",
+                  "container": "Container",
+                  "check": "Check",
+                  "Value": "Status"
+                },
+                "indexByName": {
+                  "namespace": 0,
+                  "workload_kind": 1,
+                  "workload": 2,
+                  "container": 3,
+                  "check": 4,
+                  "Value": 5
+                }
+              }
+            }
+          ]
+        },
+        {
+          "id": 21,
+          "type": "table",
+          "title": "Lowest Compliance Scores",
+          "description": "Containers with the lowest percentage of enabled checks passing",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "cib-vm"
+          },
+          "gridPos": {
+            "h": 11,
+            "w": 14,
+            "x": 0,
+            "y": 17
+          },
+          "options": {
+            "cellHeight": "sm",
+            "footer": {
+              "show": false
+            },
+            "showHeader": true,
+            "sortBy": [
+              {
+                "displayName": "Score",
+                "desc": false
+              }
+            ]
+          },
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "align": "auto",
+                "cellOptions": {
+                  "type": "auto"
+                },
+                "filterable": true
+              },
+              "mappings": []
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Score"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "percent"
+                  },
+                  {
+                    "id": "decimals",
+                    "value": 1
+                  },
+                  {
+                    "id": "thresholds",
+                    "value": {
+                      "mode": "absolute",
+                      "steps": [
+                        {
+                          "color": "red",
+                          "value": null
+                        },
+                        {
+                          "color": "orange",
+                          "value": 50
+                        },
+                        {
+                          "color": "yellow",
+                          "value": 75
+                        },
+                        {
+                          "color": "green",
+                          "value": 90
+                        }
+                      ]
+                    }
+                  },
+                  {
+                    "id": "custom.cellOptions",
+                    "value": {
+                      "type": "color-background"
+                    }
+                  }
+                ]
+              }
+            ]
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "cib-vm"
+              },
+              "expr": "bottomk(50, last_over_time(cib_kubernetes_policy_score{cluster=~\"$cluster\",namespace=~\"$namespace\",workload_kind=~\"$workload_kind\",workload=~\"$workload\"}[8h]))",
+              "format": "table",
+              "instant": true,
+              "legendFormat": "",
+              "refId": "A"
+            }
+          ],
+          "transformations": [
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "__name__": true,
+                  "cluster": true,
+                  "pod": true,
+                  "container_type": true,
+                  "image": true
+                },
+                "renameByName": {
+                  "namespace": "Namespace",
+                  "workload_kind": "Type",
+                  "workload": "Workload",
+                  "container": "Container",
+                  "Value": "Score"
+                },
+                "indexByName": {
+                  "namespace": 0,
+                  "workload_kind": 1,
+                  "workload": 2,
+                  "container": 3,
+                  "Value": 4
+                }
+              }
+            }
+          ]
+        },
+        {
+          "id": 22,
+          "type": "bargauge",
+          "title": "Violations by Policy Check",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "cib-vm"
+          },
+          "gridPos": {
+            "h": 11,
+            "w": 10,
+            "x": 14,
+            "y": 17
+          },
+          "options": {
+            "displayMode": "gradient",
+            "minVizHeight": 16,
+            "minVizWidth": 8,
+            "orientation": "horizontal",
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "showUnfilled": true,
+            "valueMode": "color"
+          },
+          "fieldConfig": {
+            "defaults": {
+              "color": {
+                "mode": "thresholds"
+              },
+              "thresholds": {
+                "mode": "absolute",
+                "steps": [
+                  {
+                    "color": "green",
+                    "value": null
+                  },
+                  {
+                    "color": "yellow",
+                    "value": 1
+                  },
+                  {
+                    "color": "orange",
+                    "value": 5
+                  },
+                  {
+                    "color": "red",
+                    "value": 15
+                  }
+                ]
+              },
+              "unit": "short"
+            },
+            "overrides": []
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "cib-vm"
+              },
+              "expr": "sum by (check) (last_over_time(cib_kubernetes_policy_violation{cluster=~\"$cluster\",namespace=~\"$namespace\",workload_kind=~\"$workload_kind\",workload=~\"$workload\",check=~\"$check\"}[8h]))",
+              "instant": true,
+              "legendFormat": "{{check}}",
+              "refId": "A"
+            }
+          ]
+        }
+      ],
+      "templating": {
+        "list": [
+          {
+            "name": "cluster",
+            "label": "Cluster",
+            "type": "query",
+            "datasource": {
+              "type": "prometheus",
+              "uid": "cib-vm"
+            },
+            "definition": "label_values(cib_kubernetes_policy_violation, cluster)",
+            "query": {
+              "query": "label_values(cib_kubernetes_policy_violation, cluster)",
+              "refId": "StandardVariableQuery"
+            },
+            "current": {
+              "selected": false,
+              "text": "All",
+              "value": "$__all"
+            },
+            "includeAll": true,
+            "multi": true,
+            "options": [],
+            "refresh": 2,
+            "regex": "",
+            "sort": 1,
+            "hide": 0
+          },
+          {
+            "name": "namespace",
+            "label": "Namespace",
+            "type": "query",
+            "datasource": {
+              "type": "prometheus",
+              "uid": "cib-vm"
+            },
+            "definition": "label_values(cib_kubernetes_policy_violation{cluster=~\"$cluster\"}, namespace)",
+            "query": {
+              "query": "label_values(cib_kubernetes_policy_violation{cluster=~\"$cluster\"}, namespace)",
+              "refId": "StandardVariableQuery"
+            },
+            "current": {
+              "selected": false,
+              "text": "All",
+              "value": "$__all"
+            },
+            "includeAll": true,
+            "multi": true,
+            "options": [],
+            "refresh": 2,
+            "regex": "",
+            "sort": 1,
+            "hide": 0
+          },
+          {
+            "name": "workload_kind",
+            "label": "Workload Type",
+            "type": "query",
+            "datasource": {
+              "type": "prometheus",
+              "uid": "cib-vm"
+            },
+            "definition": "label_values(cib_kubernetes_policy_violation{cluster=~\"$cluster\",namespace=~\"$namespace\"}, workload_kind)",
+            "query": {
+              "query": "label_values(cib_kubernetes_policy_violation{cluster=~\"$cluster\",namespace=~\"$namespace\"}, workload_kind)",
+              "refId": "StandardVariableQuery"
+            },
+            "current": {
+              "selected": false,
+              "text": "All",
+              "value": "$__all"
+            },
+            "includeAll": true,
+            "multi": true,
+            "options": [],
+            "refresh": 2,
+            "regex": "",
+            "sort": 1,
+            "hide": 0
+          },
+          {
+            "name": "workload",
+            "label": "Workload",
+            "type": "query",
+            "datasource": {
+              "type": "prometheus",
+              "uid": "cib-vm"
+            },
+            "definition": "label_values(cib_kubernetes_policy_violation{cluster=~\"$cluster\",namespace=~\"$namespace\",workload_kind=~\"$workload_kind\"}, workload)",
+            "query": {
+              "query": "label_values(cib_kubernetes_policy_violation{cluster=~\"$cluster\",namespace=~\"$namespace\",workload_kind=~\"$workload_kind\"}, workload)",
+              "refId": "StandardVariableQuery"
+            },
+            "current": {
+              "selected": false,
+              "text": "All",
+              "value": "$__all"
+            },
+            "includeAll": true,
+            "multi": true,
+            "options": [],
+            "refresh": 2,
+            "regex": "",
+            "sort": 1,
+            "hide": 0
+          },
+          {
+            "name": "check",
+            "label": "Policy Check",
+            "type": "query",
+            "datasource": {
+              "type": "prometheus",
+              "uid": "cib-vm"
+            },
+            "definition": "label_values(cib_kubernetes_policy_violation{cluster=~\"$cluster\",namespace=~\"$namespace\",workload_kind=~\"$workload_kind\",workload=~\"$workload\"}, check)",
+            "query": {
+              "query": "label_values(cib_kubernetes_policy_violation{cluster=~\"$cluster\",namespace=~\"$namespace\",workload_kind=~\"$workload_kind\",workload=~\"$workload\"}, check)",
+              "refId": "StandardVariableQuery"
+            },
+            "current": {
+              "selected": false,
+              "text": "All",
+              "value": "$__all"
+            },
+            "includeAll": true,
+            "multi": true,
+            "options": [],
+            "refresh": 2,
+            "regex": "",
+            "sort": 1,
+            "hide": 0
+          }
+        ]
+      },
+      "annotations": {
+        "list": []
+      },
+      "links": []
+    }
+kind: ConfigMap
+metadata:
+  labels:
+    grafana_dashboard: "1"
+  name: cib-kubernetes-dashboard
+  namespace: monitoring
