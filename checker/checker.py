@@ -79,11 +79,6 @@ KUBERNETES_CLUSTER_NAME = os.environ.get(
     "kubernetes",
 ).strip() or "kubernetes"
 # Licenses that violate policy by default (copyleft — problematic for proprietary stacks)
-_default_deny = "GPL-2.0-only,GPL-2.0-or-later,GPL-3.0-only,GPL-3.0-or-later,AGPL-3.0-only,AGPL-3.0-or-later"
-LICENSE_DENY_LIST = {
-    s.strip() for s in os.environ.get("LICENSE_DENY_LIST", _default_deny).split(",") if s.strip()
-}
-
 # EOL check: map Trivy OS family names to endoflife.date product names
 EOL_PRODUCT_MAP = {
     "ubuntu": "ubuntu",
@@ -706,50 +701,14 @@ def scan_trivy_json(image: str, docker_url: str = "") -> dict | None:
 
 # ── License compliance ────────────────────────────────────────────────────────
 
-def _split_spdx_expression(expr: str) -> list[str]:
-    """Split a simple SPDX expression into individual license identifiers."""
-    tokens = [expr]
-    for sep in (" OR ", " AND ", " WITH "):
-        tokens = [piece for tok in tokens for piece in tok.split(sep)]
-    return [t.strip(" ()") for t in tokens if t.strip(" ()")]
-
-
-def check_licenses(image: str, sbom: dict) -> list[dict]:
-    """Return list of license violations: {package, version, license}."""
-    violations = []
-    for component in sbom.get("components", []):
-        name = component.get("name", "")
-        version = component.get("version", "")
-        for lic_entry in component.get("licenses", []):
-            expression = lic_entry.get("expression")
-            if expression:
-                for lic_id in _split_spdx_expression(expression):
-                    if lic_id in LICENSE_DENY_LIST:
-                        violations.append({"package": name, "version": version, "license": lic_id})
-                continue
-            lic = lic_entry.get("license", {})
-            lic_id = lic.get("id") or lic.get("name") or ""
-            if lic_id in LICENSE_DENY_LIST:
-                violations.append({"package": name, "version": version, "license": lic_id})
-    return violations
-
-
-def push_license_metrics(image: str, violations: list[dict], total_components: int, host: str = "local") -> None:
+def push_sbom_metrics(image: str, total_components: int, host: str = "local") -> None:
+    """Publish SBOM inventory size without evaluating component licenses."""
     ts = _ts_ms()
     safe_image = _safe_label(image)
     safe_host = _safe_label(host)
-    lines = [
+    _push([
         f'cib_sbom_components_total{{image="{safe_image}",host="{safe_host}"}} {total_components} {ts}',
-        f'cib_license_violations_total{{image="{safe_image}",host="{safe_host}"}} {len(violations)} {ts}',
-    ]
-    for v in violations:
-        lines.append(
-            f'cib_license_violation{{image="{safe_image}",'
-            f'package="{_safe_label(v["package"])}",'
-            f'version="{_safe_label(v["version"])}",'
-            f'license="{_safe_label(v["license"])}",host="{safe_host}"}} 1 {ts}'
-        )
-    _push(lines)
+    ])
 
 
 # ── EOL check ─────────────────────────────────────────────────────────────────
@@ -897,42 +856,20 @@ def run_scan() -> None:
         sbom = scan_sbom(image, docker_url)
 
         if not sbom:
-            push_license_metrics(
+            push_sbom_metrics(
                 image,
-                [],
                 0,
                 host=host_name,
             )
             return
 
         total_components = len(sbom.get("components", []))
-        violations = check_licenses(image, sbom)
-
-        push_license_metrics(
+        push_sbom_metrics(
             image,
-            violations,
             total_components,
             host=host_name,
         )
-
-        if violations:
-            logger.info(
-                "  %s — %d license violations (%s)",
-                image,
-                len(violations),
-                ", ".join(
-                    sorted({
-                        violation["license"]
-                        for violation in violations
-                    })
-                ),
-            )
-        else:
-            logger.info(
-                "  %s — %d components, no license violations",
-                image,
-                total_components,
-            )
+        logger.info("  %s — %d SBOM components", image, total_components)
 
         total_images += 1
 

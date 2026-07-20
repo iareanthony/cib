@@ -179,8 +179,6 @@ spec:
                   value: /data/sboms
                 - name: TRIVY_TIMEOUT
                   value: "600"
-                - name: LICENSE_DENY_LIST
-                  value: "AGPL-3.0-only,AGPL-3.0-or-later"
                 - name: KUBERNETES_ENABLED_CHECKS
                   value: not_privileged,non_root_user,no_privilege_escalation,no_host_network,no_host_pid,no_host_ipc,no_dangerous_capabilities
                 - name: KUBERNETES_EXCLUDED_NAMESPACES

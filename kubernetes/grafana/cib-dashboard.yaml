@@ -4,7 +4,7 @@ data:
     {
       "uid": "cib-overview",
       "title": "CIB \u2014 Compliance Overview",
-      "description": "Kubernetes container policy, license compliance, SBOM inventory, and EOL base image tracking",
+      "description": "Kubernetes container policy, SBOM inventory, and EOL base image tracking",
       "tags": [
         "cib",
         "compliance",
@@ -133,61 +133,6 @@ data:
               },
               "expr": "last_over_time(cib_eol_images_total[8h])",
               "legendFormat": "EOL Images",
-              "refId": "A"
-            }
-          ]
-        },
-        {
-          "id": 3,
-          "type": "stat",
-          "title": "License Violations",
-          "description": "Images with copyleft or denied licenses in their SBOM",
-          "gridPos": {
-            "h": 4,
-            "w": 5,
-            "x": 10,
-            "y": 0
-          },
-          "options": {
-            "reduceOptions": {
-              "calcs": [
-                "lastNotNull"
-              ]
-            },
-            "colorMode": "background",
-            "graphMode": "none",
-            "justifyMode": "center",
-            "textMode": "auto"
-          },
-          "fieldConfig": {
-            "defaults": {
-              "color": {
-                "mode": "thresholds"
-              },
-              "thresholds": {
-                "mode": "absolute",
-                "steps": [
-                  {
-                    "color": "green",
-                    "value": null
-                  },
-                  {
-                    "color": "orange",
-                    "value": 1
-                  }
-                ]
-              },
-              "mappings": []
-            }
-          },
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "cib-vm"
-              },
-              "expr": "sum(last_over_time(cib_license_violations_total[8h])) or vector(0)",
-              "legendFormat": "License Violations",
               "refId": "A"
             }
           ]
@@ -437,151 +382,6 @@ data:
           ]
         },
         {
-          "id": 8,
-          "type": "table",
-          "title": "License Violations",
-          "description": "SBOM components with denied licenses (copyleft / policy violations)",
-          "gridPos": {
-            "h": 9,
-            "w": 12,
-            "x": 12,
-            "y": 28
-          },
-          "options": {
-            "footer": {
-              "show": false
-            }
-          },
-          "fieldConfig": {
-            "defaults": {
-              "custom": {
-                "align": "left",
-                "displayMode": "auto"
-              }
-            },
-            "overrides": [
-              {
-                "matcher": {
-                  "id": "byName",
-                  "options": "image"
-                },
-                "properties": [
-                  {
-                    "id": "displayName",
-                    "value": "Image"
-                  }
-                ]
-              },
-              {
-                "matcher": {
-                  "id": "byName",
-                  "options": "package"
-                },
-                "properties": [
-                  {
-                    "id": "displayName",
-                    "value": "Package"
-                  }
-                ]
-              },
-              {
-                "matcher": {
-                  "id": "byName",
-                  "options": "version"
-                },
-                "properties": [
-                  {
-                    "id": "displayName",
-                    "value": "Version"
-                  }
-                ]
-              },
-              {
-                "matcher": {
-                  "id": "byName",
-                  "options": "license"
-                },
-                "properties": [
-                  {
-                    "id": "displayName",
-                    "value": "License"
-                  },
-                  {
-                    "id": "links",
-                    "value": [
-                      {
-                        "title": "SPDX",
-                        "url": "https://spdx.org/licenses/${__value.raw}.html"
-                      }
-                    ]
-                  }
-                ]
-              },
-              {
-                "matcher": {
-                  "id": "byName",
-                  "options": "Value"
-                },
-                "properties": [
-                  {
-                    "id": "displayName",
-                    "value": "Status"
-                  },
-                  {
-                    "id": "custom.width",
-                    "value": 100
-                  },
-                  {
-                    "id": "mappings",
-                    "value": [
-                      {
-                        "type": "value",
-                        "options": {
-                          "1": {
-                            "text": "VIOLATION",
-                            "color": "red",
-                            "index": 0
-                          }
-                        }
-                      }
-                    ]
-                  },
-                  {
-                    "id": "custom.displayMode",
-                    "value": "color-background"
-                  }
-                ]
-              }
-            ]
-          },
-          "transformations": [
-            {
-              "id": "organize",
-              "options": {
-                "excludeByName": {
-                  "Time": true,
-                  "__name__": true
-                },
-                "indexByName": {},
-                "renameByName": {}
-              }
-            }
-          ],
-          "targets": [
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "cib-vm"
-              },
-              "expr": "last_over_time(cib_license_violation[8h])",
-              "instant": true,
-              "legendFormat": "",
-              "refId": "A",
-              "format": "table"
-            }
-          ]
-        },
-        {
           "id": 9,
           "type": "timeseries",
           "title": "Compliance Trend",
@@ -634,15 +434,6 @@ data:
               "expr": "cib_eol_images_total",
               "legendFormat": "EOL Images",
               "refId": "B"
-            },
-            {
-              "datasource": {
-                "type": "prometheus",
-                "uid": "cib-vm"
-              },
-              "expr": "sum(cib_license_violations_total) or vector(0)",
-              "legendFormat": "License Violations",
-              "refId": "C"
             }
           ]
         },

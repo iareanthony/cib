@@ -57,14 +57,6 @@ The first scan starts immediately (5–15 minutes, Trivy pulls license DB on fir
 | `TRIVY_TIMEOUT` | `300` | Trivy timeout per image (seconds) |
 | `ADDITIONAL_IMAGES` | — | Extra images to scan beyond running containers |
 | `DOCKER_HOST` | — | Remote Docker daemon (`tcp://host:port`); leave unset for local socket |
-| `LICENSE_DENY_LIST` | GPL/AGPL | Comma-separated SPDX IDs to flag as violations |
-
-### Customising the license deny list
-
-```env
-# Only flag AGPL (keep GPL — maybe you're fine with copyleft for internal tools)
-LICENSE_DENY_LIST=AGPL-3.0-only,AGPL-3.0-or-later
-```
 
 ---
 
@@ -75,9 +67,9 @@ LICENSE_DENY_LIST=AGPL-3.0-only,AGPL-3.0-or-later
 | `cib_policy_violation` | `container`, `check` | 1 if the check fails, 0 if it passes |
 | `cib_container_policy_score` | `container` | % of checks passing (0–100) |
 | `cib_image_eol` | `image`, `os`, `version`, `eol_date` | 1 if base OS is EOL |
-| `cib_license_violation` | `image`, `package`, `version`, `license` | 1 per license violation |
-| `cib_license_violations_total` | `image` | Total violations per image |
 | `cib_sbom_components_total` | `image` | Total SBOM component count |
+
+SBOMs are retained as inventory only; CIB does not evaluate or enforce software licenses.
 | `cib_total_policy_violations` | — | Sum of all policy violations |
 | `cib_eol_images_total` | — | Count of EOL images |
 | `cib_images_checked_total` | — | Images checked in last run |
