@@ -1,4 +1,4 @@
-docker==7.1.0
-requests==2.32.3
+docker==7.2.0
+requests==2.34.2
 schedule==1.2.2
-kubernetes>=30,<35
+kubernetes>=37,<38

@@ -35,5 +35,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: ./checker
+          pull: true
+          no-cache: true
           push: true
           tags: ghcr.io/iareanthony/cib-checker:feature-kubernetes-compliance

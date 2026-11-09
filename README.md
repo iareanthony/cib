@@ -111,6 +111,9 @@ CIB complements [VIB](https://github.com/matijazezelj/vib):
 
 Both push to their own VictoriaMetrics instances; both are independently deployable.
 
+The Kubernetes checker image is rebuilt without cache from Alpine 3.23 and uses
+current supported Python, Docker, Kubernetes, and Requests clients.
+
 ---
 
 ## In-a-box ecosystem
