@@ -164,7 +164,7 @@ spec:
           restartPolicy: Never
           containers:
             - name: checker
-              image: ghcr.io/iareanthony/cib-checker:feature-kubernetes-compliance
+              image: ghcr.io/iareanthony/cib-checker:feature-kubernetes-compliance@sha256:b4e67abd779db86fedc140b179ec0425b090df20d2d2870517e3549978ec97b5
               imagePullPolicy: Always
               args:
                 - --once
